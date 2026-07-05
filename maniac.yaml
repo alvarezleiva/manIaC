@@ -4,7 +4,7 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       KeyName: miKeyPair                    
-      ImageId: ami-06067086cf86c58e6        # Cogemos la AMI
+      ImageId: ami-0049736975ba478c0        # Cogemos la AMI
       InstanceType: t3.micro                # Compatible con Free Tier
       SecurityGroupIds:
         - !Ref secGroupName                 # SG con puertos 22 y 80
