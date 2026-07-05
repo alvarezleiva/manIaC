@@ -54,7 +54,6 @@ Resources:
   secGroupName:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: Maniac-SG                  # Nombre del SG
       GroupDescription: SG del proyecto Maniac
       VpcId: !Ref myVPC                     # SG dentro de la VPC (Referencia)
       SecurityGroupIngress:
@@ -87,7 +86,6 @@ Resources:
   subnetName:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: eu-west-1a          # Zona de disponibilidad
       VpcId: !Ref myVPC                     # Subnet dentro de la VPC (Referencia)
       CidrBlock: 10.0.1.0/24                # Rango de la Subnet
       MapPublicIpOnLaunch: true             # EC2 recibe IP pública
@@ -154,3 +152,55 @@ Resources:
     Properties:
       Roles:
         - !Ref myEC2Role                    # Perfil asociado a la EC2
+    maniacALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG para el ALB              # Security Group exclusivo para el Load Balancer
+      VpcId: !Ref myVPC                             # El ALB vive dentro de tu VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp                           # Permite tráfico HTTP
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0                         # Acceso público desde Internet
+      Tags:
+        - Key: Name
+          Value: Maniac-ALB-SG                      # Nombre del SG del ALB
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref myVPC                             # El Target Group pertenece a tu VPC
+      TargetType: instance                          # El ALB enviará tráfico a instancias EC2
+      Port: 80                                      # Puerto donde escucha tu API en la EC2
+      Protocol: HTTP                                # Protocolo HTTP
+      HealthCheckPath: /status                      # Ruta usada para comprobar si la EC2 está sana
+
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing                       # ALB accesible desde Internet
+      Name: manIaC-ALB                              # Nombre del Load Balancer
+      Subnets:
+        - !Ref subnetName                           # El ALB se despliega en tu subnet pública
+      SecurityGroups:
+        - !Ref maniacALBSG                          # SG del ALB (permite tráfico HTTP)
+      Tags:
+        - Key: Name
+          Value: manIaC-ALB                         # Nombre del ALB
+
+  myALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref myALB                   # Listener asociado al ALB
+      Port: 80                                      # Listener escucha en el puerto 80
+      Protocol: HTTP                                # Protocolo HTTP
+      DefaultActions:
+        - Type: forward                             # Acción por defecto: reenviar tráfico
+          TargetGroupArn: !Ref TargetGroup          # El tráfico se envía al Target Group
+
+  ManiacEC2TargetGroupAttachment:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup              # Target Group donde se registra la EC2
+      TargetId: !Ref myEC2Instance                  # ID de la instancia EC2
+      Port: 80                                      # Puerto donde escucha la API en la EC2
