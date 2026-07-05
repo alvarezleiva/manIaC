@@ -1,4 +1,3 @@
-Este proyecto implementa una API REST junto con su infraestructura en AWS, definida mediante CloudFormation.
-El objetivo es ofrecer un servicio backend escalable, versionado y totalmente automatizado, donde tanto el código de la API como la infraestructura que la soporta se gestionan como código (IaC).
-
-La API expone endpoints para gestionar recursos (entidades del dominio del proyecto) y está diseñada siguiendo buenas prácticas de arquitectura, seguridad y despliegue continuo.
+manIaC es una arquitectura completa desplegada en AWS mediante CloudFormation.
+El proyecto crea una VPC con subnets públicas en dos Availability Zones, un Internet Gateway, una instancia EC2 que ejecuta una API REST y un Application Load Balancer que distribuye tráfico de forma segura y altamente disponible.
+Todo está definido como código, lo que permite reproducir la infraestructura, escalarla y mantenerla siguiendo buenas prácticas de DevOps y AWS.
