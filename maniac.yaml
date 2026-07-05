@@ -3,15 +3,15 @@ Resources:
   myEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      KeyName: miKeyPair                    
-      ImageId: ami-0049736975ba478c0        # Cogemos la AMI
-      InstanceType: t3.micro                # Compatible con Free Tier
+      KeyName: miKeyPair
+      ImageId: ami-0049736975ba478c0
+      InstanceType: t3.micro
       SecurityGroupIds:
-        - !Ref secGroupName                 # SG con puertos 22 y 80
-      SubnetId: !Ref subnetName             # EC2 en subnet pública
-      IamInstanceProfile: !Ref myInstanceProfile   # Permisos para CloudWatch
+        - !Ref secGroupName
+      SubnetId: !Ref subnetName
+      IamInstanceProfile: !Ref myInstanceProfile
 
-      UserData:                             # Script que instala la API REST 
+      UserData:
         Fn::Base64: |
           #!/bin/bash
           yum update -y
@@ -44,8 +44,7 @@ Resources:
           app.run(host="0.0.0.0", port=80)
           EOF
 
-          python3 /home/ec2-user/app.py &   # Arranca la API
-
+          python3 /home/ec2-user/app.py &
       Tags:
         - Key: Name
           Value: Maniac-EC2
@@ -57,16 +56,16 @@ Resources:
       GroupDescription: SG del proyecto Maniac
       VpcId: !Ref myVPC
       SecurityGroupIngress:
-        - IpProtocol: tcp                   # SSH
+        - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp                   # API REST en puerto 80
+        - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
-        - IpProtocol: -1                    # Todo tráfico saliente
+        - IpProtocol: -1
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
@@ -93,8 +92,9 @@ Resources:
       Tags:
         - Key: Name
           Value: manIaC-Subnet
+
   subnetName2:
-    Type: AWS::EC2::Subnet    # Subred adicional para el ALB
+    Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref myVPC
       CidrBlock: 10.0.2.0/24
@@ -103,7 +103,6 @@ Resources:
       Tags:
         - Key: Name
           Value: manIaC-Subnet-2
-
 
 
   igwName:
@@ -144,12 +143,11 @@ Resources:
       SubnetId: !Ref subnetName
       RouteTableId: !Ref routeTableName
 
-  associateSubnetRouteTable2:  # MUY IMPORTANTE OTRA SUBNET PARA EL ALB, SINO NO FUNCIONA
+  associateSubnetRouteTable2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref subnetName2
       RouteTableId: !Ref routeTableName
-
 
 
   myEC2Role:
@@ -171,57 +169,4 @@ Resources:
     Properties:
       Roles:
         - !Ref myEC2Role
-
-
-  maniacALBSG:  
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: SG para el ALB
-      VpcId: !Ref myVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: Maniac-ALB-SG
-
-
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      VpcId: !Ref myVPC
-      TargetType: instance
-      Port: 80
-      Protocol: HTTP
-      HealthCheckPath: /status
-      Targets:
-        - Id: !Ref myEC2Instance
-          Port: 80
-
-
-  myALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internet-facing
-      Name: manIaC-ALB
-      Subnets:
-        - !Ref subnetName
-        - !Ref subnetName2  # IMPORTANTE REFERENCIAR LA OTRA SUBNET PARA EL ALB, SINO NO FUNCIONA
-      SecurityGroups:
-        - !Ref maniacALBSG
-      Tags:
-        - Key: Name
-          Value: manIaC-ALB
-
-
-  myALBListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref myALB
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref TargetGroup
+  
