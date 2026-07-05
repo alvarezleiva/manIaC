@@ -1,0 +1,156 @@
+Resources:
+
+  myEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: miKeyPair                    
+      ImageId: ami-06067086cf86c58e6        # Cogemos la AMI
+      InstanceType: t3.micro                # Compatible con Free Tier
+      SecurityGroupIds:
+        - !Ref secGroupName                 # SG con puertos 22 y 80
+      SubnetId: !Ref subnetName             # EC2 en subnet pública
+      IamInstanceProfile: !Ref myInstanceProfile   # Permisos para CloudWatch
+
+      UserData:                             # Script que instala la API REST 
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y python3 pip amazon-cloudwatch-agent
+
+          pip install flask psutil
+
+          cat <<EOF > /home/ec2-user/app.py
+          from flask import Flask, jsonify
+          import psutil
+
+          app = Flask(__name__)
+
+          @app.route("/status")
+          def status():
+              return jsonify({"status": "ok"})
+
+          @app.route("/metrics")
+          def metrics():
+              return jsonify({
+                  "cpu": psutil.cpu_percent(),
+                  "memory": psutil.virtual_memory().percent,
+                  "disk": psutil.disk_usage('/').percent
+              })
+
+          @app.route("/hello")
+          def hello():
+              return "Hola desde Maniac API!"
+
+          app.run(host="0.0.0.0", port=80)
+          EOF
+
+          python3 /home/ec2-user/app.py &   # Arranca la API
+
+      Tags:
+        - Key: Name
+          Value: Maniac-EC2
+
+
+  secGroupName:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Maniac-SG                  # Nombre del SG
+      GroupDescription: SG del proyecto Maniac
+      VpcId: !Ref myVPC                     # SG dentro de la VPC (Referencia)
+      SecurityGroupIngress:
+        - IpProtocol: tcp                   # SSH
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp                   # API REST en puerto 80
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1                    # Todo tráfico saliente
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Maniac-SG
+
+
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16                # Rango de red
+      EnableDnsSupport: true                # DNS activado
+      Tags:
+        - Key: Name
+          Value: manIaC-VPC
+
+
+  subnetName:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: eu-west-1a          # Zona de disponibilidad
+      VpcId: !Ref myVPC                     # Subnet dentro de la VPC (Referencia)
+      CidrBlock: 10.0.1.0/24                # Rango de la Subnet
+      MapPublicIpOnLaunch: true             # EC2 recibe IP pública
+      Tags:
+        - Key: Name
+          Value: manIaC-Subnet
+
+
+  igwName:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: manIaC-IGW
+
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref myVPC                     # IGW unido a la VPC
+      InternetGatewayId: !Ref igwName
+
+
+  routeTableName:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC                     # Route Table de la VPC
+      Tags:
+        - Key: Name
+          Value: manIaC-RT
+
+
+  routeToInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routeTableName     # Ruta dentro de la RT
+      DestinationCidrBlock: 0.0.0.0/0       # Todo el tráfico
+      GatewayId: !Ref igwName               # Sale por el IGW
+
+
+  associateSubnetRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subnetName             # Subnet pública
+      RouteTableId: !Ref routeTableName     # Asociada a la RT
+
+
+  myEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:             # EC2 puede asumir este rol
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy   # Permisos CloudWatch
+
+
+  myInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref myEC2Role                    # Perfil asociado a la EC2
