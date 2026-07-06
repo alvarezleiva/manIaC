@@ -76,7 +76,7 @@ Resources:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
+      EnableDnsSupport: true  # Habilita la resolución de nombres DNS
       Tags:
         - Key: Name
           Value: manIaC-VPC
@@ -87,7 +87,7 @@ Resources:
     Properties:
       VpcId: !Ref myVPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: eu-west-1a
+      AvailabilityZone: eu-west-1a   # Zona de disponibilidad para la subred
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
@@ -98,7 +98,7 @@ Resources:
     Properties:
       VpcId: !Ref myVPC
       CidrBlock: 10.0.2.0/24
-      AvailabilityZone: eu-west-1b
+      AvailabilityZone: eu-west-1b   # Zona de disponibilidad para la subred
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
@@ -106,7 +106,7 @@ Resources:
 
 
   igwName:
-    Type: AWS::EC2::InternetGateway
+    Type: AWS::EC2::InternetGateway   # Internet Gateway para la VPC
     Properties:
       Tags:
         - Key: Name
@@ -114,14 +114,14 @@ Resources:
 
 
   AttachGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
+    Type: AWS::EC2::VPCGatewayAttachment  # Adjunta el Internet Gateway a la VPC
     Properties:
       VpcId: !Ref myVPC
-      InternetGatewayId: !Ref igwName
+      InternetGatewayId: !Ref igwName  # Referencia al Internet Gateway creado anteriormente
 
 
   routeTableName:
-    Type: AWS::EC2::RouteTable
+    Type: AWS::EC2::RouteTable   # Route Table para la VPC
     Properties:
       VpcId: !Ref myVPC
       Tags:
@@ -130,11 +130,11 @@ Resources:
 
 
   routeToInternet:
-    Type: AWS::EC2::Route
+    Type: AWS::EC2::Route  # Ruta para el tráfico hacia Internet
     Properties:
       RouteTableId: !Ref routeTableName
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref igwName
+      GatewayId: !Ref igwName  # Referencia al Internet Gateway para enrutar el tráfico hacia Internet
 
 
   associateSubnetRouteTable:
@@ -151,7 +151,7 @@ Resources:
 
 
   myEC2Role:
-    Type: AWS::IAM::Role
+    Type: AWS::IAM::Role  # Permisos para la instancia EC2
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -165,8 +165,61 @@ Resources:
 
 
   myInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
+    Type: AWS::IAM::InstanceProfile  
     Properties:
       Roles:
         - !Ref myEC2Role
-  
+
+
+  maniacALBSG:  
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG para el ALB
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Maniac-ALB-SG
+
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref myVPC
+      TargetType: instance
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: /status
+      Targets:
+        - Id: !Ref myEC2Instance
+          Port: 80
+
+
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Name: manIaC-ALB
+      Subnets:
+        - !Ref subnetName
+        - !Ref subnetName2  # IMPORTANTE REFERENCIAR LA OTRA SUBNET PARA EL ALB, SINO NO FUNCIONA
+      SecurityGroups:
+        - !Ref maniacALBSG
+      Tags:
+        - Key: Name
+          Value: manIaC-ALB
+
+
+  myALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref myALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
