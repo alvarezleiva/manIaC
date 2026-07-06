@@ -9,8 +9,7 @@ Resources:
       SecurityGroupIds:
         - !Ref secGroupName
       SubnetId: !Ref subnetName
-      IamInstanceProfile: !Ref myInstanceProfile
-
+      IamInstanceProfile: !Ref EC2IAMInstanceProfile # Asociamos el perfil de instancia que contiene los roles para S3 y CloudWatch
       UserData:
         Fn::Base64: |
           #!/bin/bash
@@ -164,13 +163,6 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
 
 
-  myInstanceProfile:
-    Type: AWS::IAM::InstanceProfile  
-    Properties:
-      Roles:
-        - !Ref myEC2Role
-
-
   maniacALBSG:  
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -223,3 +215,54 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
+  
+  s3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: 
+      BucketName: "maniac-static-s3-20001991"  # Nombre unico del bucket
+      VersioningConfiguration: 
+        Status: Enabled
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: true  # Bloquea el acceso público a los ACLs
+        BlockPublicPolicy: true # Bloquea el acceso público a las políticas
+        IgnorePublicAcls: true  # Ignora los ACLs públicos
+        RestrictPublicBuckets: true # Bloquea el acceso público a los buckets
+
+  EC2InstanceRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "maniac-ec2-s3-role-${AWS::StackName}"  # Nombre unico del rol 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy  # Permisos completos para S3
+
+  EC2S3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "maniac-ec2-s3-policy-${AWS::StackName}"  # Nombre unico de la política
+      Roles:
+        - !Ref EC2InstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource: 
+              - !Sub "arn:aws:s3:::maniac-static-s3-20001991/*"  # Permisos para el bucket S3 creado anteriormente
+              - !Sub "arn:aws:s3:::maniac-static-s3-20001991"  # Permisos para el bucket S3 creado anteriormente
+
+  EC2IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "maniac-ec2-instance-profile-${AWS::StackName}"  # Nombre unico del perfil de instancia
+      Roles:
+        - !Ref EC2InstanceRole
