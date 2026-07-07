@@ -10,7 +10,7 @@ Resources:
         - !Ref secGroupName
       SubnetId: !Ref subnetName
       IamInstanceProfile: !Ref EC2IAMInstanceProfile # Asociamos el perfil de instancia que contiene los roles para S3 y CloudWatch
-      UserData:
+      UserData: # Script de inicialización para instalar dependencias y configurar la aplicación Flask
         Fn::Base64: |
           #!/bin/bash
           yum update -y
@@ -24,11 +24,11 @@ Resources:
 
           app = Flask(__name__)
 
-          @app.route("/status")
+          @app.route("/status") # Endpoint para verificar el estado de la aplicación
           def status():
               return jsonify({"status": "ok"})
 
-          @app.route("/metrics")
+          @app.route("/metrics") # Endpoint para obtener métricas del sistema
           def metrics():
               return jsonify({
                   "cpu": psutil.cpu_percent(),
@@ -36,7 +36,7 @@ Resources:
                   "disk": psutil.disk_usage('/').percent
               })
 
-          @app.route("/hello")
+          @app.route("/hello") # Endpoint para saludar
           def hello():
               return "Hola desde Maniac API!"
 
@@ -50,7 +50,7 @@ Resources:
 
 
   secGroupName:
-    Type: AWS::EC2::SecurityGroup
+    Type: AWS::EC2::SecurityGroup  # Security Group para la instancia EC2
     Properties:
       GroupDescription: SG del proyecto Maniac
       VpcId: !Ref myVPC
@@ -148,23 +148,8 @@ Resources:
       SubnetId: !Ref subnetName2
       RouteTableId: !Ref routeTableName
 
-
-  myEC2Role:
-    Type: AWS::IAM::Role  # Permisos para la instancia EC2
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
-
-
   maniacALBSG:  
-    Type: AWS::EC2::SecurityGroup
+    Type: AWS::EC2::SecurityGroup  # Security Group para el Application Load Balancer (ALB)
     Properties:
       GroupDescription: SG para el ALB
       VpcId: !Ref myVPC
@@ -179,7 +164,7 @@ Resources:
 
 
   TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup  # Target Group para el Application Load Balancer (ALB)
     Properties:
       VpcId: !Ref myVPC
       TargetType: instance
@@ -192,7 +177,7 @@ Resources:
 
 
   myALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer  # Application Load Balancer (ALB)
     Properties:
       Scheme: internet-facing
       Name: manIaC-ALB
@@ -207,9 +192,9 @@ Resources:
 
 
   myALBListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
+    Type: AWS::ElasticLoadBalancingV2::Listener  # Listener para el Application Load Balancer (ALB)
     Properties:
-      LoadBalancerArn: !Ref myALB
+      LoadBalancerArn: !Ref myALB 
       Port: 80
       Protocol: HTTP
       DefaultActions:
@@ -219,7 +204,7 @@ Resources:
   s3Bucket:
     Type: AWS::S3::Bucket
     Properties: 
-      BucketName: "maniac-static-s3-20001991"  # Nombre unico del bucket
+      BucketName: "maniac-static-s3-e20001991"  # Nombre unico del bucket
       VersioningConfiguration: 
         Status: Enabled
       PublicAccessBlockConfiguration: 
@@ -240,10 +225,11 @@ Resources:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy  # Permisos completos para S3
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy  # Permisos para CloudWatch Agent
 
   EC2S3Policy:
     Type: AWS::IAM::Policy
+    DependsOn: s3Bucket  # Asegura que el bucket S3 se cree antes de la política (sin esto, la política podría fallar si el bucket no existe)
     Properties:
       PolicyName: !Sub "maniac-ec2-s3-policy-${AWS::StackName}"  # Nombre unico de la política
       Roles:
@@ -257,12 +243,11 @@ Resources:
               - s3:PutObject
               - s3:ListBucket
             Resource: 
-              - !Sub "arn:aws:s3:::maniac-static-s3-20001991/*"  # Permisos para el bucket S3 creado anteriormente
-              - !Sub "arn:aws:s3:::maniac-static-s3-20001991"  # Permisos para el bucket S3 creado anteriormente
-
+              - !Sub "arn:aws:s3:::maniac-static-s3-20001991/*"  # Permisos sobre objetos del bucket
+              - !Sub "arn:aws:s3:::maniac-static-s3-20001991"  # Permisos para el bucket en sí
   EC2IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       InstanceProfileName: !Sub "maniac-ec2-instance-profile-${AWS::StackName}"  # Nombre unico del perfil de instancia
       Roles:
-        - !Ref EC2InstanceRole
+        - !Ref EC2InstanceRole # Asociamos el rol creado anteriormente al perfil de instancia
